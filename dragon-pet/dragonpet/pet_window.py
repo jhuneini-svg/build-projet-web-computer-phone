@@ -54,6 +54,7 @@ class PetWindow(QWidget):
         self._blink_timer = random.randint(60, 160)
         self._mouth_open = 0.0
         self._idle_frames = 0
+        self._interacting = False
         self._drag_offset: QPoint | None = None
 
         self.bubble = SpeechBubble()
@@ -92,16 +93,16 @@ class PetWindow(QWidget):
     def celebrate(self) -> None:
         self.stats.tasks_done += 1
         self.stats.happiness = min(100.0, self.stats.happiness + 8)
-        self.set_mood(Mood.HAPPY, 2.5)
+        self.set_mood(Mood.HAPPY, 5.0)
 
     def on_error(self, message: str = "") -> None:
-        self.set_mood(Mood.ON_FIRE, 3.0, speak=False)
-        self.say(message or MOOD_SPEECH[Mood.ON_FIRE], 4000, error=True)
+        self.set_mood(Mood.ON_FIRE, 5.0, speak=False)
+        self.say(message or MOOD_SPEECH[Mood.ON_FIRE], 5000, error=True)
 
     def feed(self) -> None:
         self.stats.hunger = min(100.0, self.stats.hunger + 30)
         self.stats.happiness = min(100.0, self.stats.happiness + 6)
-        self.set_mood(Mood.FEEDING, 2.5)
+        self.set_mood(Mood.FEEDING, 4.5)
 
     # -- speech -----------------------------------------------------------
     def say(self, text: str, duration_ms: int = 3500, error: bool = False) -> None:
@@ -123,8 +124,8 @@ class PetWindow(QWidget):
             if self._mood_hold == 0:
                 self._mood = Mood.IDLE
 
-        # idle -> sleep after inactivity
-        if self._mood == Mood.IDLE:
+        # idle -> sleep after inactivity (never doze off mid-conversation)
+        if self._mood == Mood.IDLE and not self._interacting:
             self._idle_frames += 1
             if self._idle_frames == FPS * 8:
                 self._mouth_open = 1.0  # yawn
@@ -150,7 +151,7 @@ class PetWindow(QWidget):
 
     # -- wandering --------------------------------------------------------
     def _maybe_wander(self) -> None:
-        if self._mood not in (Mood.IDLE,):
+        if self._interacting or self._mood not in (Mood.IDLE,):
             return
         if random.random() < 0.5:
             return
@@ -213,11 +214,16 @@ class PetWindow(QWidget):
         self.prompt_command()
 
     def prompt_command(self) -> None:
-        text, ok = QInputDialog.getText(
-            self,
-            "\U0001F409 \u0627\u0644\u062a\u0646\u064a\u0646",
-            "\u0645\u0627\u0630\u0627 \u062a\u0631\u064a\u062f\u0646\u064a \u0623\u0646 \u0623\u0641\u0639\u0644\u061f",
-        )
+        self._interacting = True
+        self._idle_frames = 0
+        try:
+            text, ok = QInputDialog.getText(
+                self,
+                "\U0001F409 \u0627\u0644\u062a\u0646\u064a\u0646",
+                "\u0645\u0627\u0630\u0627 \u062a\u0631\u064a\u062f\u0646\u064a \u0623\u0646 \u0623\u0641\u0639\u0644\u061f",
+            )
+        finally:
+            self._interacting = False
         if ok and text.strip():
             self.set_mood(Mood.EXCITED, 1.0)
             self.command_requested.emit(text.strip())
@@ -237,7 +243,12 @@ class PetWindow(QWidget):
         menu.addAction(act_stats)
         menu.addSeparator()
         menu.addAction(act_quit)
-        menu.exec(pos)
+        self._interacting = True
+        self._idle_frames = 0
+        try:
+            menu.exec(pos)
+        finally:
+            self._interacting = False
 
     def _show_stats(self) -> None:
         s = self.stats
