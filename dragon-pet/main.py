@@ -6,7 +6,12 @@ Double-click the dragon (or right-click -> "give a command") to talk to it.
 
 from __future__ import annotations
 
+import os
 import sys
+
+# Make the app runnable from any working directory (e.g. via Start-Process,
+# a shortcut, or a different cwd) by ensuring this file's folder is importable.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
