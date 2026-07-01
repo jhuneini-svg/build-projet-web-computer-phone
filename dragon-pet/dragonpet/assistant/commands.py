@@ -41,13 +41,20 @@ class Worker(QThread):
     succeeded = Signal(str)
     failed = Signal(str)
 
-    def __init__(self, intent: str, argument: str) -> None:
+    def __init__(self, text: str, intent: str, argument: str) -> None:
         super().__init__()
+        self.text = text
         self.intent = intent
         self.argument = argument
 
     def run(self) -> None:  # noqa: D401
         try:
+            # Refine the rule-based guess with AI *in this background thread*
+            # so the optional network call never freezes the UI event loop.
+            ai = ai_brain.understand(self.text)
+            if ai:
+                self.intent = ai["intent"]
+                self.argument = ai["argument"] or self.text
             self.succeeded.emit(self._execute())
         except Exception as exc:  # noqa: BLE001 - surfaced to the user as fire
             self.failed.emit(f"{type(exc).__name__}: {exc}")
@@ -90,12 +97,9 @@ class CommandController(QObject):
         self._worker: Worker | None = None
 
     def handle(self, text: str) -> None:
-        # Prefer AI understanding, fall back to rules.
-        ai = ai_brain.understand(text)
-        if ai:
-            intent, argument = ai["intent"], ai["argument"] or text
-        else:
-            intent, argument = parse_intent(text)
+        # Rule-based intent gives an instant visual cue; the worker then
+        # refines it with AI (if configured) off the UI thread.
+        intent, argument = parse_intent(text)
 
         self.memory.record_command(intent)
         if intent == "open_app":
@@ -113,7 +117,7 @@ class CommandController(QObject):
         else:
             self.pet.set_mood(Mood.EXCITED, 1.5)
 
-        worker = Worker(intent, argument)
+        worker = Worker(text, intent, argument)
         worker.succeeded.connect(self._on_success)
         worker.failed.connect(self._on_failure)
         worker.finished.connect(worker.deleteLater)
