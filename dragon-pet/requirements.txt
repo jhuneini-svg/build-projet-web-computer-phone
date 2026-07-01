@@ -1,0 +1,6 @@
+PySide6>=6.6
+
+# Optional integrations (uncomment / install as needed):
+# SpeechRecognition>=3.10   # voice -> text
+# pyautogui>=0.9            # GUI automation for system tasks
+# openai>=1.0               # cloud natural-language understanding
